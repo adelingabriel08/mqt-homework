@@ -282,4 +282,67 @@ public class MQTHomeworkController : ControllerBase
         return Ok(messages);
     }
     
+    [HttpPost("exercise11/ConsumerBeingProducer")]
+    public IActionResult ConsumerBeingProducer()
+    {
+        var config = new ConsumerConfig
+        {
+            GroupId = $"kafkaStringsTopic-group",
+            BootstrapServers = _serverUrl,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            EnableAutoCommit = false
+        };
+        
+        using var consumer = new ConsumerBuilder<Ignore, ProductOrdered>(config)
+            .SetValueDeserializer(new SystemTextJsonKafkaSerializer<ProductOrdered>()).Build();
+        
+        consumer.Subscribe("kafkaEventsTopic");
+
+        var messages = new List<ProductOrdered>();
+        try
+        {
+            while (true)
+            {
+                try
+                {
+                    var result = consumer.Consume(TimeSpan.FromSeconds(2));
+                       
+
+                    if (result is null || result.Message is null || result.Message.Value is null)
+                        break;
+                    
+                    messages.Add(result.Message.Value);
+                }
+                catch (ConsumeException e)
+                {
+                    Console.WriteLine($"Error occurred: {e.Error.Reason}");
+                       
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Ensure the consumer leaves the group cleanly and final offsets are committed.
+            consumer.Close();
+        }
+        
+        var producerConfig = new ProducerConfig
+        {
+            BootstrapServers = _serverUrl
+        };
+
+        using var producer = new ProducerBuilder<Null, ProductOrdered>(producerConfig)
+            .SetValueSerializer(new SystemTextJsonKafkaSerializer<ProductOrdered>()).Build();
+
+        var response = new List<string>();
+        
+        foreach (var message in messages)
+        {
+            var produceResult = producer.ProduceAsync("kafkaConsumerProducing", new Message<Null, ProductOrdered> { Value = message }).Result;
+            response.Add($"Produced message to topic '{produceResult.Topic}', partition {produceResult.Partition}, offset {produceResult.Offset} - ProductId {message.ProductId}");
+        }
+        
+        return Ok(response);
+    }
+    
 }
