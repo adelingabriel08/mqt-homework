@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Confluent.Kafka;
 using Confluent.Kafka.SyncOverAsync;
@@ -343,6 +344,68 @@ public class MQTHomeworkController : ControllerBase
         }
         
         return Ok(response);
+    }
+
+    [HttpGet("exercise12/RestProxyCreateTopicAndRead")]
+    public async Task<IActionResult> RestProxyCreateTopicAndRead(string topicName, string messageToBeSent)
+    {
+        string restProxyBaseUrl = "http://localhost:8082";
+        
+        // Create topic
+        using (HttpClient httpClient = new HttpClient())
+        {
+            string createTopicUrl = $"{restProxyBaseUrl}/topics/{topicName}";
+            
+            string requestBody = "{\"partitions\": 1, \"replication-factor\": 1}";
+            
+            var response = await httpClient.PostAsync(createTopicUrl, new StringContent(requestBody, Encoding.UTF8, "application/json"));
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Topic '{topicName}' created successfully.");
+            }
+            else
+            {
+                return Ok($"Failed to create topic '{topicName}'. Status code: {response.StatusCode}");
+            }
+        }
+
+        // Produce a message to the topic (for testing purposes)
+        using (HttpClient httpClient = new HttpClient())
+        {
+            string produceMessageUrl = $"{restProxyBaseUrl}/topics/{topicName}";
+
+            var messageContent = new StringContent($"{{\"records\":[{{\"value\":\"{messageToBeSent}\"}}]}}", Encoding.UTF8, "application/vnd.kafka.json.v2+json");
+
+            var response = await httpClient.PostAsync(produceMessageUrl, messageContent);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Message produced to '{topicName}' successfully.");
+            }
+            else
+            {
+                return Ok($"Failed to produce message to '{topicName}'. Status code: {response.StatusCode}");
+            }
+        }
+
+        // Consume messages
+        using (HttpClient httpClient = new HttpClient())
+        {
+            string consumeMessagesUrl = $"{restProxyBaseUrl}/consumers/group1/instances/consumer1/topics/{topicName}/partitions/{1}";
+
+            var response = await httpClient.GetAsync(consumeMessagesUrl);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var responseBody = await response.Content.ReadAsStringAsync();
+                return Ok($"Consumed messages: {responseBody}");
+            }
+            else
+            {
+                return Ok($"Failed to consume messages from '{topicName}'. Status code: {response.StatusCode}");
+            }
+        }
     }
     
 }
