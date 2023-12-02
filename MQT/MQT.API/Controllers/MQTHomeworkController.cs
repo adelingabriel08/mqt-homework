@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Confluent.Kafka;
 using Microsoft.AspNetCore.Mvc;
 
@@ -61,6 +62,68 @@ public class MQTHomeworkController : ControllerBase
                         break;
                     
                     messages.Add(result.Message.Value);
+                }
+                catch (ConsumeException e)
+                {
+                    Console.WriteLine($"Error occurred: {e.Error.Reason}");
+                       
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Ensure the consumer leaves the group cleanly and final offsets are committed.
+            consumer.Close();
+        }
+
+        return Ok(messages);
+    }
+    
+    [HttpPost("exercise4/ProduceJsonMessage")]
+    public IActionResult ProduceJsonMessage(string id, string name, string description)
+    {
+        var config = new ProducerConfig
+        {
+            BootstrapServers = _serverUrl
+        };
+
+        using var producer = new ProducerBuilder<Null, string>(config).Build();
+
+        var message = new { Id = id, Name = name, Description = description };
+        var produceResult = producer.ProduceAsync("kafkaJsonTopic", new Message<Null, string> { Value = JsonSerializer.Serialize(message) }).Result;
+        return Ok($"Produced message to topic '{produceResult.Topic}', partition {produceResult.Partition}, offset {produceResult.Offset}");
+    }
+
+    [HttpGet("exercise5/ConsumeJsonMessages")]
+    public IActionResult ConsumeJsonMessages()
+    {
+        var config = new ConsumerConfig
+        {
+            GroupId = $"kafkaStringsTopic-group",
+            BootstrapServers = _serverUrl,
+            AutoOffsetReset = AutoOffsetReset.Earliest,
+            EnableAutoCommit = false
+        };
+        
+        using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
+        
+        consumer.Subscribe("kafkaJsonTopic");
+
+        var messages = new List<dynamic>();
+        try
+        {
+            while (true)
+            {
+                try
+                {
+                    var result = consumer.Consume(TimeSpan.FromSeconds(2));
+                       
+                    Console.WriteLine($"Consumed message '{result.Message.Value}' at: '{result.TopicPartitionOffset}'.");
+
+                    if (result.Message.Value is null)
+                        break;
+                    
+                    messages.Add(JsonSerializer.Deserialize<dynamic>(result.Message.Value));
                 }
                 catch (ConsumeException e)
                 {
