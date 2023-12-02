@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "name": "ProductOrdered",
+  "fields": [
+    {"name": "ProductId", "type": "int"},
+    {"name": "ProductName", "type": "string"},
+    {"name": "Observations", "type": "string"},
+    {"name": "Quantity", "type": "int"}
+  ]
+}
